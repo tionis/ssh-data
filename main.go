@@ -21,15 +21,21 @@ func main() {
 				Name:    "server",
 				Aliases: []string{"s"},
 				Flags: []cli.Flag{
-					&cli.IntFlag{
+					&cli.StringFlag{
+						Name:    "listen",
+						Aliases: []string{"l", "host"},
+						Value:   "127.0.0.1",
+						Usage:   "host address to listen on for ssh server",
+					},
+					&cli.StringFlag{
 						Name:    "port",
 						Aliases: []string{"p"},
-						Value:   22,
+						Value:   "22",
 						Usage:   "port to listen on for ssh server",
 					},
 					&cli.StringFlag{
 						Name:    "log-level",
-						Aliases: []string{"l"},
+						Aliases: []string{"ll"},
 						Value:   "info",
 						Usage:   "log level (debug, info, warn, error)",
 					},
@@ -60,7 +66,7 @@ func main() {
 					logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 						Level: logLevel,
 					}))
-					return startServer(logger, c.Int("port"), c.String("data-dir"))
+					return startServer(logger, c.String("host"), c.String("port"), c.String("data-dir"))
 				},
 			},
 		},
@@ -71,9 +77,9 @@ func main() {
 	}
 }
 
-func startServer(logger *slog.Logger, port int, dataDir string) error {
+func startServer(logger *slog.Logger, host, port string, dataDir string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer stop()
-	srv := server.New(logger, ctx, port, dataDir)
+	srv := server.New(logger, ctx, host, port, dataDir)
 	return srv.Start()
 }

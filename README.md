@@ -34,8 +34,15 @@ Streams can be used for pubsub, with different modes of operation.
 - ...
 
 ## ToDo
+- [ ] evaluate alternative design listed below
 - [ ] implement PoC
 - [ ] implement a locking mechanism to enable client-side json manipulation (to support encryption and similar features)
 - [ ] add direct access to sqlite databases (perhaps over a json-rpc interface)
       the json-rpc interface should accept either raw sql or a json object with the sql query and its parameters
       the return value should be a json object `["success", <result_table>]` or `["error", "error message"]`.
+
+## Alternative design
+- have a single sqlite db per user that can be queried over a json-rpc interface and a repl
+- also have support for "channels" that can either work via pubsub or mpmc to match each message one-to-one
+- streams could then be implemented using a sqlite db + a message to a pubsub channel
+- possibly use https://github.com/rqlite/sql to parse sql before encoding it again for sqlite to support channels and streams better?

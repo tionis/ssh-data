@@ -7,7 +7,6 @@ import (
 	"log/slog"
 )
 
-// sqlite db
 type UserDB struct {
 	db *sql.DB
 }
@@ -58,9 +57,4 @@ func applyMigrations(db *sql.DB, ctx context.Context, logger *slog.Logger) error
 		}
 	}
 	return nil
-}
-
-func newDB(path string) *db {
-	return &db{
-		s}
 }

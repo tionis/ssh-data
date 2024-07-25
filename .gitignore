@@ -2,3 +2,4 @@
 ssh-data
 data/
 db.sqlite3*
+.ssh
