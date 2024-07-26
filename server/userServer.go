@@ -30,27 +30,27 @@ func (s *UserServer) Start() error {
 		var commandList []interface{}
 		err := json.Unmarshal(scanner.Bytes(), &commandList)
 		if err != nil {
-			s.logger.Error("Could not unmarshal command", "error", err)
+			s.printErrorWithMessage("Could not unmarshal command", err)
 			continue
 		}
 		if len(commandList) == 0 {
-			s.logger.Error("Empty command")
+			s.printErrorMessage("empty command")
 			continue
 		}
 		command, ok := commandList[0].(string)
 		if !ok {
-			s.logger.Error("Invalid command", "command", commandList)
+			s.printErrorMessage("Invalid type of command")
 			continue
 		}
 		switch command {
 		case "sql":
 			if len(commandList) < 2 {
-				s.logger.Error("Invalid number of arguments", "command", command)
+				s.printErrorMessage("Invalid number of arguments")
 				continue
 			}
 			query, ok := commandList[1].(string)
 			if !ok {
-				s.logger.Error("Invalid type of argument", "command", command)
+				s.printErrorMessage("Invalid type of argument")
 				continue
 			}
 			args := make([]interface{}, len(commandList)-2)
@@ -59,35 +59,35 @@ func (s *UserServer) Start() error {
 			}
 			resp, err := s.userDB.queryToJSON(query, args...)
 			if err != nil {
-				s.logger.Error("Could not execute query", "error", err)
+				s.printError(err)
 				continue
 			}
 			fmt.Println(resp)
 		case "pub":
 			if len(commandList) != 3 {
-				s.logger.Error("Invalid number of arguments", "command", command)
+				s.printErrorMessage("Invalid number of arguments")
 				continue
 			}
 			channel, ok := commandList[1].(string)
 			if !ok {
-				s.logger.Error("Invalid type of argument", "command", command)
+				s.printErrorMessage("Invalid type of argument")
 				continue
 			}
 			message, ok := commandList[2].(string)
 			if !ok {
-				s.logger.Error("Invalid type of argument", "command", command)
+				s.printErrorMessage("Invalid type of argument")
 				continue
 			}
 			ch := s.userDB.GetChannel(channel)
 			ch <- message
 		case "sub":
 			if len(commandList) != 2 {
-				s.logger.Error("Invalid number of arguments", "command", command)
+				s.printErrorWithMessage("Invalid number of arguments", fmt.Errorf("command: %v", command))
 				continue
 			}
 			channel, ok := commandList[1].(string)
 			if !ok {
-				s.logger.Error("Invalid type of argument", "command", command)
+				s.printErrorMessage("Invalid type of argument")
 				continue
 			}
 			ch := s.userDB.GetChannel(channel)
@@ -102,10 +102,14 @@ func (s *UserServer) Start() error {
 						continue
 					}
 					fmt.Println(string(messageJSON))
+					continue
 				}
 			}
 		case "end":
 			return nil
+		default:
+			s.printErrorMessage("Invalid command")
+			continue
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -113,4 +117,27 @@ func (s *UserServer) Start() error {
 		return fmt.Errorf("error reading from stdin: %w", err)
 	}
 	return nil
+}
+
+func (s *UserServer) Close() error {
+	return s.userDB.Close()
+}
+
+func (s *UserServer) printErrorMessage(message string) {
+	s.printError(fmt.Errorf(message))
+}
+
+func (s *UserServer) printErrorWithMessage(message string, err error) {
+	message = fmt.Sprintf("%s: %s", message, err)
+	s.printError(fmt.Errorf(message))
+}
+
+func (s *UserServer) printError(err error) {
+	message := []string{"error", err.Error()}
+	messageJSON, err := json.Marshal(message)
+	if err != nil {
+		s.logger.Error("Could not marshal message", "error", err)
+		return
+	}
+	fmt.Println(string(messageJSON))
 }

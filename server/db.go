@@ -45,7 +45,7 @@ func NewUserDB(ctx context.Context, dbPath string, logger *slog.Logger) (*UserDB
 	}
 	err = userDB.applyMigrations()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not apply migrations: %w", err)
 	}
 	return userDB, nil
 }
