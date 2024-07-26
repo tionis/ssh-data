@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +11,7 @@ import (
 	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
+	_ "github.com/mattn/go-sqlite3"
 	"log/slog"
 	"net"
 	"os"
@@ -52,19 +52,14 @@ func (s *Server) GetUserDB(username string) (*UserDB, error) {
 		userDir := path.Join(s.dataDir, username)
 		err := os.MkdirAll(userDir, 0700)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not create user directory: %w", err)
 		}
 		// open db
-		db, err := sql.Open("sqlite3", path.Join(userDir, "data.db"))
+		userDB, err := NewUserDB(s.context, path.Join(userDir, "data.db"), s.logger)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not open database: %w", err)
 		}
-		// apply migrations
-		err = applyMigrations(db, s.context, s.logger)
-		if err != nil {
-			return nil, err
-		}
-		s.userDBs[username] = &UserDB{db: db}
+		s.userDBs[username] = userDB
 		return s.userDBs[username], nil
 	}
 	return db, nil
