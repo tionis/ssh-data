@@ -30,6 +30,11 @@ var (
 	}
 )
 
+// TODO add custom funcs to handle string manipulation and maybe extend json handling
+// TODO add locking support either via an expiring lock or a transaction if possible
+// (for client side data munging (e.g. an encrypted json object))
+// TODO implement all the data handling functions
+
 func NewUserDB(ctx context.Context, dbPath string, logger *slog.Logger) (*UserDB, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {

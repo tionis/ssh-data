@@ -132,7 +132,7 @@ func startUserServer(logger *slog.Logger, dbPath string) error {
 	if err != nil {
 		return err
 	}
-	return srv.Start()
+	return srv.Start(os.Stdin, os.Stdout)
 }
 
 func startServer(logger *slog.Logger, host, port string, dataDir string) error {

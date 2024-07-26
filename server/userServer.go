@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
-	"os"
 )
 
 type UserServer struct {
@@ -24,33 +24,34 @@ func NewUserServer(logger *slog.Logger, context context.Context, dbPath string) 
 	return &UserServer{userDB: userDB, logger: logger, ctx: context}, nil
 }
 
-func (s *UserServer) Start() error {
-	scanner := bufio.NewScanner(os.Stdin)
+func (s *UserServer) Start(in io.Reader, out io.Writer) error {
+	scanner := bufio.NewScanner(in)
+	write := bufio.NewWriter(out)
 	for scanner.Scan() {
 		var commandList []interface{}
 		err := json.Unmarshal(scanner.Bytes(), &commandList)
 		if err != nil {
-			s.printErrorWithMessage("Could not unmarshal command", err)
+			s.printErrorWithMessage(write, "Could not unmarshal command", err)
 			continue
 		}
 		if len(commandList) == 0 {
-			s.printErrorMessage("empty command")
+			s.printErrorMessage(write, "empty command")
 			continue
 		}
 		command, ok := commandList[0].(string)
 		if !ok {
-			s.printErrorMessage("Invalid type of command")
+			s.printErrorMessage(write, "Invalid type of command")
 			continue
 		}
 		switch command {
 		case "sql":
 			if len(commandList) < 2 {
-				s.printErrorMessage("Invalid number of arguments")
+				s.printErrorMessage(write, "Invalid number of arguments")
 				continue
 			}
 			query, ok := commandList[1].(string)
 			if !ok {
-				s.printErrorMessage("Invalid type of argument")
+				s.printErrorMessage(write, "Invalid type of argument")
 				continue
 			}
 			args := make([]interface{}, len(commandList)-2)
@@ -59,35 +60,35 @@ func (s *UserServer) Start() error {
 			}
 			resp, err := s.userDB.queryToJSON(query, args...)
 			if err != nil {
-				s.printError(err)
+				s.printError(write, err)
 				continue
 			}
 			fmt.Println(resp)
 		case "pub":
 			if len(commandList) != 3 {
-				s.printErrorMessage("Invalid number of arguments")
+				s.printErrorMessage(write, "Invalid number of arguments")
 				continue
 			}
 			channel, ok := commandList[1].(string)
 			if !ok {
-				s.printErrorMessage("Invalid type of argument")
+				s.printErrorMessage(write, "Invalid type of argument")
 				continue
 			}
 			message, ok := commandList[2].(string)
 			if !ok {
-				s.printErrorMessage("Invalid type of argument")
+				s.printErrorMessage(write, "Invalid type of argument")
 				continue
 			}
 			ch := s.userDB.GetChannel(channel)
 			ch <- message
 		case "sub":
 			if len(commandList) != 2 {
-				s.printErrorWithMessage("Invalid number of arguments", fmt.Errorf("command: %v", command))
+				s.printErrorWithMessage(write, "Invalid number of arguments", fmt.Errorf("command: %v", command))
 				continue
 			}
 			channel, ok := commandList[1].(string)
 			if !ok {
-				s.printErrorMessage("Invalid type of argument")
+				s.printErrorMessage(write, "Invalid type of argument")
 				continue
 			}
 			ch := s.userDB.GetChannel(channel)
@@ -108,7 +109,7 @@ func (s *UserServer) Start() error {
 		case "end":
 			return nil
 		default:
-			s.printErrorMessage("Invalid command")
+			s.printErrorMessage(write, "Invalid command")
 			continue
 		}
 	}
@@ -123,21 +124,24 @@ func (s *UserServer) Close() error {
 	return s.userDB.Close()
 }
 
-func (s *UserServer) printErrorMessage(message string) {
-	s.printError(fmt.Errorf(message))
+func (s *UserServer) printErrorMessage(out io.Writer, message string) {
+	s.printError(out, fmt.Errorf(message))
 }
 
-func (s *UserServer) printErrorWithMessage(message string, err error) {
+func (s *UserServer) printErrorWithMessage(out io.Writer, message string, err error) {
 	message = fmt.Sprintf("%s: %s", message, err)
-	s.printError(fmt.Errorf(message))
+	s.printError(out, fmt.Errorf(message))
 }
 
-func (s *UserServer) printError(err error) {
+func (s *UserServer) printError(out io.Writer, err error) {
 	message := []string{"error", err.Error()}
 	messageJSON, err := json.Marshal(message)
 	if err != nil {
 		s.logger.Error("Could not marshal message", "error", err)
 		return
 	}
-	fmt.Println(string(messageJSON))
+	_, err = out.Write(messageJSON)
+	if err != nil {
+		s.logger.Error("Could not write message", "error", err)
+	}
 }
