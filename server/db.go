@@ -7,6 +7,7 @@ import (
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"log/slog"
+	"strconv"
 	"sync"
 )
 
@@ -25,18 +26,25 @@ var (
     			key TEXT PRIMARY KEY,
     			type TEXT NOT NULL DEFAULT 'string',
     			value TEXT NOT NULL DEFAULT '',
-                validUntil INTEGER NOT NULL DEFAULT -1
-        );`,
+                validUntil INTEGER NOT NULL DEFAULT -1, -- -1 means never expires
+                lockedUntil INTEGER NOT NULL DEFAULT -1 -- -1 means unlocked
+        );
+		CREATE TABLE authorized_keys( -- TODO just use json for this?
+		    pubKey TEXT PRIMARY KEY,
+		    principals JSON, -- store as a json array, as it's a pattern list that needs to be checked in series
+		    isCA BOOL NOT NULL DEFAULT FALSE,
+		    expiryTime INTEGER NOT NULL DEFAULT -1, -- -1 means never expires
+		    fromIP JSON,
+			options JSON NOT NULL DEFAULT '{}' -- raw options
+		);`,
 	}
 )
 
 // TODO add custom funcs to handle string manipulation and maybe extend json handling
-// TODO add locking support either via an expiring lock or a transaction if possible
-// (for client side data munging (e.g. an encrypted json object))
 // TODO implement all the data handling functions
 
 func NewUserDB(ctx context.Context, dbPath string, logger *slog.Logger) (*UserDB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", dbPath+"?_fk=true&_timeout=5000&_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("could not open database: %w", err)
 	}
@@ -62,28 +70,30 @@ func (db *UserDB) applyMigrations() error {
 			return fmt.Errorf("could not get user_version: %w", err)
 		}
 		var version int
-		hasValue := query.Next()
-		if !hasValue {
+		if !query.Next() {
 			return fmt.Errorf("could not get user_version")
 		}
 		err = query.Scan(&version)
 		if err != nil {
 			return fmt.Errorf("could not get user_version: %w", err)
 		}
+		err = query.Close()
+		if err != nil {
+			return fmt.Errorf("could not close query: %w", err)
+		}
 		if version >= len(migrations) {
 			break
 		}
 		db.logger.Info("Applying migration", "version", version)
-		_, err = db.db.ExecContext(db.ctx, "BEGIN TRANSACTION;"+migrations[version]+"COMMIT;")
+		_, err = db.db.ExecContext(db.ctx,
+			"BEGIN TRANSACTION;"+
+				migrations[version]+
+				"PRAGMA user_version = "+strconv.Itoa(version+1)+";"+
+				"COMMIT;")
 		if err != nil {
 			return fmt.Errorf("could not apply migration: %w", err)
 		}
 		db.logger.Info("Migration applied", "version", version)
-		version++
-		_, err = db.db.Exec("PRAGMA user_version = ?", version)
-		if err != nil {
-			return fmt.Errorf("could not set user_version: %w", err)
-		}
 	}
 	return nil
 }
